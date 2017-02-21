@@ -60,6 +60,7 @@ var (
 	outputFile      string
 	showVersion     bool
 	clientCertFile  string
+	thresholdMsec   int
 
 	// number of redirects followed
 	redirectsFollowed int
@@ -80,6 +81,7 @@ func init() {
 	flag.StringVar(&outputFile, "o", "", "output file for body")
 	flag.BoolVar(&showVersion, "v", false, "print version number")
 	flag.StringVar(&clientCertFile, "E", "", "client cert file for tls config")
+	flag.IntVar(&thresholdMsec, "S", 0, "suppress all output if a request is faster than this (in msec)")
 
 	flag.Usage = usage
 }
@@ -219,7 +221,9 @@ func visit(url *url.URL) {
 			}
 			t2 = time.Now()
 
-			printf("\n%s%s\n", color.GreenString("Connected to "), color.CyanString(addr))
+			if thresholdMsec == 0 {
+				printf("\n%s%s\n", color.GreenString("Connected to "), color.CyanString(addr))
+			}
 		},
 		GotConn:              func(_ httptrace.GotConnInfo) { t3 = time.Now() },
 		GotFirstResponseByte: func() { t4 = time.Now() },
@@ -276,6 +280,11 @@ func visit(url *url.URL) {
 	if t0.IsZero() {
 		// we skipped DNS
 		t0 = t1
+	}
+
+	// if a request duration threshold was defined and the request was faster, don't print anything
+	if thresholdMsec != 0 && t5.Sub(t0) < time.Duration(thresholdMsec)*time.Millisecond {
+		return
 	}
 
 	// print status line and headers
